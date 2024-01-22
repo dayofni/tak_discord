@@ -18,7 +18,7 @@ class PlaytakClient:
     async def send(self, msg: str):
         await self.ws.send(msg)
     
-    async def rec(self, timeout=2) -> Optional[str]:
+    async def rec(self, timeout=1) -> Optional[str]:
         
         try:
             msg = await asyncio.wait_for(self.ws.recv(), timeout=timeout)
@@ -131,11 +131,11 @@ class PlaytakClient:
             "increment", 
             "half_komi", 
             "pieces", 
-            "caps", 
+            "capstones", 
             "unrated", 
             "tournament", 
             "extra_time_move", 
             "extra_time_amount"
         ]
 
-        return dict(zip(keys, [int(i) if i.isnumeric() else i for i in params],))
+        return dict(zip(keys, [int(i) if i.isnumeric() else i for i in params])) | {"result": None}

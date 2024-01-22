@@ -181,54 +181,7 @@ async def playtak_loop(ws):
 async def generate_out(parse: dict, ws, top=25):
     
     data = parse["data"]
-    out_format = EMBEDS[parse["parse_type"]]["embeds"][0]
     
-    if parse["parse_type"] == "new_game":
-        
-        # We need to generate a player string.
-        
-        # Get players
-        
-        player1, player2 = data["player1"], data["player2"]
-        
-        rank_p1, rating_p1 = RATINGS[player1] if player1 in RATINGS else (None, None)
-        rank_p2, rating_p2 = RATINGS[player2] if player2 in RATINGS else (None, None)
-        
-        rating_str_p1 = (f"{rating_p1}" if rating_p1 else "unrated") + (f", #{rank_p1}" if rank_p1 and rank_p1 <= top else "")
-        rating_str_p2 = (f"{rating_p2}" if rating_p2 else "unrated") + (f", #{rank_p2}" if rank_p2 and rank_p2 <= top else "")
-        
-        players = f'**{player1}** ({rating_str_p1}) vs. **{player2}** ({rating_str_p2}) is live on [playtak.com](https://playtak.com)!'
-        
-        # Get game info
-        
-        game = f'**Parameters:** {data["size"]}s' + (f' w/ {inty_division(data["komi"], 2)} komi' if data["komi"] > 0 else "") + " | "
-        time = f'{get_timestamp(data["time"])}+{get_timestamp(data["increment"])}'
-        extra_time = "" if not data["extra_time"] else f' (+{get_timestamp(data["extra_time"])}@{data["extra_time_move"]})'
-        
-        std_stones = STANDARD_PIECES[data["size"]]
-        stones = ""
-        
-        if std_stones != [data["pieces"], data["capstones"]]:
-            
-            capstone = "capstone" if data["capstones"] == 1 else "capstones"
-            
-            stones = f'\n**Altered counts:** {data["pieces"]} pieces, {data["capstones"]} {capstone}.'
-        
-        # Game result
-        
-        result = "**Result:** Ongoing"
-        
-        if data["result"]:
-            result = f'**Result:** {data["result"]} ([playtak.com](https://playtak.com/games/{data["no"]}/playtakviewer) or [ptn.ninja](https://playtak.com/games/{data["no"]}/ninjaviewer))'
-        
-        parameters = players + "\n\n" + game + time + extra_time + stones + "\n" + result
-        
-        out_format["description"] = parameters
-        
-        image_link = await generate_image_link(data["no"], ws)
-        out_format["image"] = {"url": image_link}
-    
-    return discord.Embed.from_dict(out_format)
     
 
 def parse_typical(tokens):

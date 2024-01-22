@@ -40,7 +40,7 @@ class DiscordClient:
         # Is channel in cache?
         
         if channel_num in self.known_channels:
-            channel = await self.bot.get_channel(channel_num)
+            channel = self.bot.get_channel(channel_num)
             got_channel = channel != None
         
         # Fetch channel manually (slower)
