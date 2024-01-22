@@ -935,7 +935,7 @@ class TakBoard:
 
     #? Server move format handling
     
-    def server_to_move(self, server_move: str, player: str) -> dict:
+    def server_to_move(self, server_move: list, player: str) -> dict:
         
         """
         Converts a given playtak move command to the `TakBoard` internal format.

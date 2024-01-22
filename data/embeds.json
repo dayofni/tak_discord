@@ -1,0 +1,22 @@
+{
+    "new_game": {
+        "content": "@Tournament Spectator",
+        "tts": false,
+        "embeds": [
+          {
+            "id": 302228431,
+            "description": "",
+            "fields": [],
+            "author": {
+              "name": "Playtak Tournament Game",
+              "url": "https://playtak.com",
+              "icon_url": "https://playtak.com/favicon.svg"
+            },
+            "color": 16713584
+          }
+        ],
+        "components": [],
+        "actions": {},
+        "username": "NamakoBot"
+      }
+}

@@ -4,6 +4,12 @@
 import json
 import logging
 
+from urllib.parse import quote_plus
+
+# Personal libaries
+
+from tak.board import TakBoard
+
 # 3rd party libraries
 
 import aiohttp
@@ -11,14 +17,10 @@ import asyncio
 import discord
 import websockets
 
+from discord.ext import tasks
+
 
 #? CONSTANTS
-
-with open("data/secrets.json") as f:
-    SECRETS = json.loads(f.read())
-
-with open(("data/embeds.json")) as f2:
-    EMBEDS = json.loads(f2.read())
 
 STANDARD_PIECES = {
     3: [10, 0],
@@ -28,6 +30,8 @@ STANDARD_PIECES = {
     7: [40, 2],
     8: [50, 2]
 }
+
+RATINGS = {}
 
 #? GLOBALS
 
@@ -47,7 +51,6 @@ logging.basicConfig(
 logging.info("NamakoBot-Discord initialised.")
 
 
-
 #! ----------------------------
 
 #!           PLAYTAK
@@ -55,52 +58,76 @@ logging.info("NamakoBot-Discord initialised.")
 #! ----------------------------
 
 
-async def log_into_playtak(username: str, password: str, ws):
+"""
+@tasks.loop(seconds=15)
+async def update_pictures():
     
-    msg = None
-    while msg != "Login or Register": # Wait for the server to boot
-        msg = await rec_playtak(ws)
+    ...
+"""
+
+async def generate_image_link(game_id, ws, timeout=0):
     
-    # Now we can log in
+    global game_data
     
-    login = f"Login {username} {password}"
-    await asyncio.gather(send_playtak(login, ws))
+    game_settings = game_data[game_id]["settings"]
     
-    welcome_msg = f"Welcome {username}!" # Once we get this, we know that we've logged in
-    login_msg   = await rec_playtak(ws)
+    board                 = TakBoard(game_settings["size"], game_settings["komi"])
+    board.player_reserves = {player:[game_settings["pieces"], game_settings["capstones"]] for player in board.player_reserves}
     
-    if login_msg != welcome_msg:
-        logging.error("Invalid username or password given to playtak login!")
+    move = "Blank Message"
+    
+    await send_playtak(f'Observe {game_settings["no"]}', ws)
+    
+    # Observe game
+    
+    last_move = None
+    
+    player = "white"
+    
+    while move and move.split()[0] != f'Game#{game_settings["no"]}' and move.split()[1] not in ["P", "M"]:
+        move = await rec_playtak(ws)
+        await asyncio.sleep(0.01)
+    
+    while move:
         
-    assert login_msg == welcome_msg, "Invalid username or password!" # If we don't... well, you've messed up the login sequence
-    
-    print(f"Playtak: Logged in as {username}!") # Show that we've logged into the account
-    
-    logging.info(f"Playtak: Logged in as {username}!")
+        # Get move
+        move = await rec_playtak(ws)
+        print(move)
+        
+        if (not move) or (move.split()[0] != f'Game#{game_settings["no"]}') or (move.split()[1] not in ["P", "M"]):
+            continue
+        
+        server_move = board.server_to_move(move.split()[1:], player)
+        print(server_move)
 
-async def send_playtak(msg: str, ws):
-    await ws.send(msg)
-
-async def rec_playtak(ws, timeout=2):
+        # Make move
+        
+        board.make_move(server_move, player)
+        print("Board: ", board)
+        
+        player = board.invert_player(player)
+        
+        last_move = server_move
+        
+        await asyncio.sleep(0.01)
     
-    try:
-        msg = await asyncio.wait_for(ws.recv(), timeout=timeout)
-        msg = msg.decode()[:-1] # Removes the linefeed
-    except asyncio.exceptions.TimeoutError:
-        return None
+    # Unobserve game
     
-    return msg
-
-async def get_playtak_game(game_id):
-
-    url = f"https://api.playtak.com/v1/games-history/{game_id}"
+    await send_playtak(f'Unobserve {game_settings["no"]}', ws)
     
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as r:
-            
-            if r.status == 200:
-                js = await r.json()
-                return js
+    # Generate TPS
+    
+    tps = board.position_to_TPS()
+    
+    # Send to create image
+    
+    url = f'https://tps.ptn.ninja/?tps={quote_plus(tps)}&imageSize=sm&caps={game_settings["capstones"]}&flats={game_settings["pieces"]}&player1={game_settings["player1"]}&player2={game_settings["player2"]}&name=game.png&theme={quote_plus(THEME)}'
+    
+    url += f"&hl={quote_plus(board.move_to_ptn(last_move))}" if last_move else ""
+    
+    print(url)
+    
+    return url
 
 
 #! ----------------------------
@@ -109,26 +136,6 @@ async def get_playtak_game(game_id):
 
 #! ----------------------------
 
-@bot.event
-async def on_ready():
-    
-    print(f"Discord: Logged in as {bot.user}!")
-    logging.info(f"Discord: Logged in as {bot.user}!")
-
-async def main():
-    
-    async with websockets.connect("ws://playtak.com:9999/ws", subprotocols=["binary"], ping_timeout=None) as ws:
-        
-        await log_into_playtak(
-            username = SECRETS["BotUsername"], 
-            password = SECRETS["BotPassword"],
-            ws       = ws
-        )
-        
-        await asyncio.gather(
-            bot.start(SECRETS["BotToken"]),
-            playtak_loop(ws)
-        )
 
 async def playtak_loop(ws):
     
@@ -148,33 +155,51 @@ async def playtak_loop(ws):
         
         parse = await parse_playtak_msg(msg_in)
         
+        if parse:
+            game_data[parse["data"]["no"]] = {"settings": parse["data"]}
+        
         if parse and parse["action_type"] == "new_msg":
             
-            msg_out = generate_out(parse)
+            msg_out = await generate_out(parse, ws)
             message = await channel.send(embed=msg_out)
             
-            game_data[parse["data"]["no"]] = message
+            game_data[parse["data"]["no"]] = {
+                "settings": parse["data"],
+                "message": message
+            }
         
         elif parse and parse["action_type"] == "edit_msg":
             
             message = parse["message"]
             
-            msg_out = generate_out(parse)
+            msg_out = await generate_out(parse, ws)
             
-            message = await message.edit(embed=msg_out)
+            await message.edit(embed=msg_out)
         
         await asyncio.sleep(0.01)
 
-def generate_out(parse: dict, override={}):
+async def generate_out(parse: dict, ws, top=25):
     
-    data = parse["data"] | override
+    data = parse["data"]
     out_format = EMBEDS[parse["parse_type"]]["embeds"][0]
     
     if parse["parse_type"] == "new_game":
         
         # We need to generate a player string.
         
-        players = f'**{data["player1"]}** vs. **{data["player2"]}** is live on [playtak.com](https://playtak.com)!'
+        # Get players
+        
+        player1, player2 = data["player1"], data["player2"]
+        
+        rank_p1, rating_p1 = RATINGS[player1] if player1 in RATINGS else (None, None)
+        rank_p2, rating_p2 = RATINGS[player2] if player2 in RATINGS else (None, None)
+        
+        rating_str_p1 = (f"{rating_p1}" if rating_p1 else "unrated") + (f", #{rank_p1}" if rank_p1 and rank_p1 <= top else "")
+        rating_str_p2 = (f"{rating_p2}" if rating_p2 else "unrated") + (f", #{rank_p2}" if rank_p2 and rank_p2 <= top else "")
+        
+        players = f'**{player1}** ({rating_str_p1}) vs. **{player2}** ({rating_str_p2}) is live on [playtak.com](https://playtak.com)!'
+        
+        # Get game info
         
         game = f'**Parameters:** {data["size"]}s' + (f' w/ {inty_division(data["komi"], 2)} komi' if data["komi"] > 0 else "") + " | "
         time = f'{get_timestamp(data["time"])}+{get_timestamp(data["increment"])}'
@@ -189,6 +214,8 @@ def generate_out(parse: dict, override={}):
             
             stones = f'\n**Altered counts:** {data["pieces"]} pieces, {data["capstones"]} {capstone}.'
         
+        # Game result
+        
         result = "**Result:** Ongoing"
         
         if data["result"]:
@@ -197,39 +224,12 @@ def generate_out(parse: dict, override={}):
         parameters = players + "\n\n" + game + time + extra_time + stones + "\n" + result
         
         out_format["description"] = parameters
+        
+        image_link = await generate_image_link(data["no"], ws)
+        out_format["image"] = {"url": image_link}
     
     return discord.Embed.from_dict(out_format)
-        
-def inty_division(n, div):
-     
-    a = n / div
     
-    if int(a) == a: return int(a)
-    
-    return a
-        
-def get_timestamp(sec):
-    
-    seconds = sec %  60
-    minutes = sec // 60
-    
-    if seconds == 0 and minutes == 0:
-        return "0s"
-    
-    minutes_format = ""
-    seconds_format = "00"
-    
-    if minutes > 0:
-        minutes_format = f"{minutes}:"
-    
-    if seconds > 0:
-        digits = len(str(seconds))
-        seconds_format = "0" * (2 - digits) + str(seconds)
-    
-    if minutes == 0:
-        return f"{minutes_format}{seconds_format}s"
-    
-    return f"{minutes_format}{seconds_format}"
 
 def parse_typical(tokens):
     
@@ -280,12 +280,12 @@ async def parse_playtak_msg(msg: str, tournament_only=False):
         
         parse = parse_typical(tokens)
         game = await get_playtak_game(game_num)
-        message = game_data.pop(game_num)
+        game_val = game_data.pop(game_num)
         
         return {
             "parse_type": "new_game",
             "action_type": "edit_msg",
-            "message": message,
+            "message": game_val["message"],
             "data": parse | {"result": game["result"]}
         }
     
@@ -299,4 +299,5 @@ async def parse_playtak_msg(msg: str, tournament_only=False):
 
 
 if __name__ == "__main__":
+    asyncio.run(update_rankings())
     asyncio.run(main())

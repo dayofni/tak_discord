@@ -1,5 +1,4 @@
-data/embeds.json
-data/secrets.json
-namako.log
-notes.md
 .vscode/
+*/__pycache__/
+data/secrets.json
+notes.md
