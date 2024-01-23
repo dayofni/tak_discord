@@ -12,6 +12,8 @@ class PlaytakClient:
         self.rankings = {}
         
         self.ws = None
+        
+        self.ready = False
     
     #? Essential functions
     
@@ -40,6 +42,8 @@ class PlaytakClient:
             await self.log_into_playtak(username, password)
             
             await self.update_rankings()
+            
+            self.ready = True
             
             await self.keep_alive() # Keeps the connection alive, makes sure the Tak server gets its oh so important PINGs
     
@@ -92,7 +96,19 @@ class PlaytakClient:
                 if r.status == 200:
                     js = await r.json()
                 
-        self.rankings = {player[0].split(" ")[0]: (rank, player[1]) for rank, player in enumerate(js)}
+        self.rankings = {}
+        
+        rank = 1
+        
+        for player in js:
+            name = player[0].split(" ")[0]
+            
+            rank_val = rank if name[-3:] != "Bot" else None
+            
+            self.rankings[name] = (rank_val, player[1])
+            
+            if rank_val:
+                rank += 1
     
     def parse_msg(self, msg: str) -> dict:
         

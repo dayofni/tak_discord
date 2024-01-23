@@ -11,6 +11,16 @@ from clients.playtak_client import PlaytakClient
 
 GUILDS   = [1058966677729058846]
 CHANNELS = [1058966677729058849]
+ROLE     = 1199150664446652468
+
+RESERVE_COUNTS = {
+    3: [10, 0],
+    4: [15, 0],
+    5: [21, 1],
+    6: [30, 1],
+    7: [40, 2],
+    8: [50, 2]
+}
 
 bot = discord.Bot()
 discord_cl = DiscordClient(bot=bot)
@@ -101,7 +111,8 @@ class NamakoBot:
         
         # Ensure both Playtak and Discord have connected
         
-        await asyncio.sleep(5)
+        while not (playtak_cl.ready and discord_cl.ready):
+            await asyncio.sleep(0.1)
         
         while True:
             
@@ -111,9 +122,10 @@ class NamakoBot:
                 await asyncio.sleep(0.5)
                 continue
             
-            print(playtak_msg)
-            
             msg_parse = playtak_cl.parse_msg(playtak_msg)
+            
+            if msg_parse:
+                print(playtak_msg)
             
             if not msg_parse:
                 await asyncio.sleep(0.01) # There's probably another message after it, we shouldn't wait
@@ -128,7 +140,7 @@ class NamakoBot:
                 embed = await self.generate_new_game_embed(msg_parse["data"])
                 
                 for channel in CHANNELS:
-                    message = await discord_cl.send(channel, None, embed=embed)
+                    message = await discord_cl.send(channel, f"<@&{ROLE}>", embed=embed)
                 
                 self.current_games[msg_parse["data"]["game_no"]] = {
                     "message":   message,
@@ -146,7 +158,7 @@ class NamakoBot:
                 embed   = await self.generate_new_game_embed(data)
                 
                 
-                await discord_cl.edit(message, None, embed=embed)
+                await discord_cl.edit(message, f"<@&{ROLE}>", embed=embed)
             
             await asyncio.sleep(0.01) # Gets things quick
     
@@ -154,43 +166,59 @@ class NamakoBot:
         
         out_format = self.EMBEDS["new_game"]
         
-        player1, player2 = data["player_1"], data["player_2"]
+        player_1 = data["player_1"]
+        player_2 = data["player_2"]
         
-        rank_p1, rating_p1 = playtak_cl.rankings[player1] if player1 in playtak_cl.rankings else (None, None)
-        rank_p2, rating_p2 = playtak_cl.rankings[player2] if player2 in playtak_cl.rankings else (None, None)
+        player_1_rank = self.generate_rating_str(player_1, top=top)
+        player_2_rank = self.generate_rating_str(player_2, top=top)
         
-        rating_str_p1 = (f"{rating_p1}" if rating_p1 else "unrated") + (f", #{rank_p1}" if rank_p1 and rank_p1 <= top else "")
-        rating_str_p2 = (f"{rating_p2}" if rating_p2 else "unrated") + (f", #{rank_p2}" if rank_p2 and rank_p2 <= top else "")
+        game_id    = data["game_no"]
+        size       = data["size"]
+        komi       = inty_division(data["half_komi"], 2)
+        result     = data["result"]
         
-        players = f'**{player1}** ({rating_str_p1}) vs. **{player2}** ({rating_str_p2}) is live on [playtak.com](https://playtak.com)!'
+        time       = get_timestamp(data["time"])
+        incr       = get_timestamp(data["increment"])
+        extra_time = data["extra_time_amount"]
+        extra_move = data["extra_time_move"]
         
-        # Get game info
+        pieces     = data["pieces"]
+        capstones  = data["capstones"]
         
-        game = f'**Parameters:** {data["size"]}s' + (f' w/ {inty_division(data["half_komi"], 2)} komi' if data["half_komi"] > 0 else "") + " | "
-        time = f'{get_timestamp(data["time"])}+{get_timestamp(data["increment"])}'
+        std_stones = RESERVE_COUNTS[size]
         
-        extra_time = "" if not data["extra_time_amount"] else f' (+{get_timestamp(data["extra_time_amount"])}@{data["extra_time_move"]})'
+        komi_str = f" w/ {komi} komi" if komi > 0 else ""
+        extra_time = "" if not extra_time else f' (+{get_timestamp(extra_time)}@{extra_move})'
+        time_str   = f"{time}+{incr}" + extra_time
         
-        std_stones = TakBoard(6, 0).RESERVE_COUNTS[data["size"]]
-        stones = ""
+        pl_capstone = "capstone" if data["capstones"] == 1 else "capstones"
+        stone_str   = ""
+        result_str  = "**Result:** Ongoing"
         
-        if std_stones != [data["pieces"], data["capstones"]]:
+        if std_stones != [pieces, capstones]:
+            stone_str = f"**Altered counts:** {pieces} pieces, {capstones} {pl_capstone}."
         
-            capstone = "capstone" if data["capstones"] == 1 else "capstones"
-            stones = f'\n**Altered counts:** {data["pieces"]} pieces, {data["capstones"]} {capstone}.'
-        
-        # Game result
-        result = "**Result:** Ongoing"
         if data["result"]:
-            result = f'**Result:** {data["result"]} ([playtak.com](https://playtak.com/games/{data["game_no"]}/playtakviewer) or [ptn.ninja](https://playtak.com/games/{data["game_no"]}/ninjaviewer))'
+            link_str   = f"([playtak.com](https://playtak.com/games/{game_id}/playtakviewer) or [ptn.ninja](https://playtak.com/games/{game_id}/ninjaviewer))"
+            result_str = f"**Result:** {result} {link_str}"
         
-        parameters = players + "\n\n" + game + time + extra_time + stones + "\n" + result
-        out_format["description"] = parameters
+        parameters = [
+            f"**{player_1}** ({player_1_rank}) vs. **{player_2}** ({player_2_rank}) is live on [playtak.com](https://playtak.com)!\n",
+            f"**Game ID:** {game_id}",
+            f"**Parameters:** {size}s {komi_str} | {time_str}",
+            stone_str,
+            result_str
+        ]
         
-        #image_link = await generate_image_link(data["no"])
-        #out_format["image"] = {"url": image_link}
+        out_format["description"] = "\n".join([i for i in parameters if i])
 
         return discord.Embed.from_dict(out_format)
+    
+    def generate_rating_str(self, player_name: str, top=25):
+        
+        rank, rating = playtak_cl.rankings[player_name] if (player_name in playtak_cl.rankings) else (None, None)
+        
+        return (f"{rating}" if rating else "unrated") + (f", #{rank}" if rank and rank <= top else "")
 
 
 

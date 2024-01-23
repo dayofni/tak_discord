@@ -17,6 +17,7 @@ class DiscordClient:
     def __init__(self, bot=None):
         
         self.known_channels = []
+        self.ready = False
         
         if bot == None:
             self.bot = discord.Bot()
@@ -26,6 +27,8 @@ class DiscordClient:
         
     
     async def main(self, token):
+        
+        self.ready = True
         
         await self.bot.start(token)
     
