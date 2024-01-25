@@ -222,6 +222,8 @@ class NamakoBot:
         
         embed = await self.generate_new_game_embed(game_id)
         
+        message = None
+        
         for channel in GUILDS.values():
             message = await discord_cl.send(channel, f"<@&{ROLE}>", embed=embed)
         
