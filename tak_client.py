@@ -4,8 +4,6 @@
 import json
 import logging
 
-from urllib.parse import quote_plus
-
 # Personal libaries
 
 from tak.board import TakBoard
@@ -57,13 +55,6 @@ logging.info("NamakoBot-Discord initialised.")
 
 #! ----------------------------
 
-
-"""
-@tasks.loop(seconds=15)
-async def update_pictures():
-    
-    ...
-"""
 
 async def generate_image_link(game_id, ws, timeout=0):
     
@@ -177,72 +168,6 @@ async def playtak_loop(ws):
             await message.edit(embed=msg_out)
         
         await asyncio.sleep(0.01)
-
-async def generate_out(parse: dict, ws, top=25):
-    
-    data = parse["data"]
-    
-    
-
-def parse_typical(tokens):
-    
-    ex_time_move = int(tokens[13]) if tokens[13] != "0" else None
-    
-    return {
-        "no": int(tokens[2]),
-        "player1": tokens[3],
-        "player2": tokens[4],
-        "size": int(tokens[5]),
-        "time": int(tokens[6]),
-        "increment": int(tokens[7]),
-        "komi": int(tokens[8]),
-        "pieces": int(tokens[9]),
-        "capstones": int(tokens[10]),
-        "tournament": tokens[12] == "1",
-        "extra_time_move": ex_time_move,
-        "extra_time": int(tokens[14]) if ex_time_move else None,
-        "result": None
-    }
-
-async def parse_playtak_msg(msg: str, tournament_only=False):
-    
-    tokens = msg.strip().split()
-    
-    if tokens[:2] == "GameList Add".split():
-        
-        # GameList Add 600638 BeginnerBot dayofni 5         600  30        0    21     1         0       0          0             0        
-        # Seek new     no     white       black   boardsize time increment komi pieces capstones unrated tournament extratimemove extratime
-        
-        parse = parse_typical(tokens)
-        
-        if tournament_only and not parse["tournament"]:
-            return None
-        
-        return {
-            "parse_type": "new_game",
-            "action_type": "new_msg",
-            "data": parse
-        }
-    
-    elif tokens[:2] == "GameList Remove".split():
-        
-        game_num = int(tokens[2])
-        
-        if game_num not in game_data:
-            return None
-        
-        parse = parse_typical(tokens)
-        game = await get_playtak_game(game_num)
-        game_val = game_data.pop(game_num)
-        
-        return {
-            "parse_type": "new_game",
-            "action_type": "edit_msg",
-            "message": game_val["message"],
-            "data": parse | {"result": game["result"]}
-        }
-    
-    return None
 
 #! ----------------------------
 

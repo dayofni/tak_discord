@@ -3,15 +3,17 @@ import asyncio
 import discord
 import json
 
-from discord.ext import tasks 
-
 from tak.board              import TakBoard
 from clients.discord_client import DiscordClient
 from clients.playtak_client import PlaytakClient
 
+from urllib.parse import quote_plus
+
 GUILDS   = [1058966677729058846]
 CHANNELS = [1058966677729058849]
 ROLE     = 1199150664446652468
+
+UPDATE_IMAGES = False
 
 RESERVE_COUNTS = {
     3: [10, 0],
@@ -42,9 +44,10 @@ async def on_ready():
 async def ping(ctx):
     await ctx.respond(f"Pinged by <@{ctx.author.id}>.")
 
-@tasks.loop(seconds=15)
-async def update_rankings():
-    playtak_cl.update_rankings()
+@bot.slash_command(guild_ids=GUILDS)
+async def set_channel(ctx):
+    ...
+
 
 #? Namako [Playtak Bridge]
 
@@ -79,6 +82,38 @@ def get_timestamp(sec):
     
     return f"{minutes_format}{seconds_format}"
 
+class TaskScheduler:
+    
+    def __init__(self):
+        
+        self.tasks = []
+    
+    async def main(self):
+        
+        while True:
+            
+            await asyncio.sleep(1)
+            
+            for task in self.tasks:
+                task["last_run"] += 1
+                
+                if task["last_run"] >= task["interval"]:
+                    task["function"]()
+                    task["last_run"] = 0
+    
+    def schedule_task(self, function, interval_sec: int):
+        
+        self.tasks.append({
+            "function": function,
+            "interval": interval_sec,
+            "last_run": 0
+        })
+
+
+def update_imgs():
+    global UPDATE_IMAGES
+    UPDATE_IMAGES = True
+
 class NamakoBot:
     
     def __init__(self):
@@ -89,10 +124,14 @@ class NamakoBot:
         with open("data/embeds.json") as f:
             self.EMBEDS = json.loads(f.read())
 
-        with open("data/theme.json") as f:
+        with open("data/theme.json") as f: # just need the string <3
             self.THEME = f.read()
         
         self.current_games = {}
+        self.queue = []
+        self.scheduler = TaskScheduler()
+        
+        self.scheduler.schedule_task(update_imgs, 15)
     
     async def start(self):
         
@@ -103,11 +142,14 @@ class NamakoBot:
             playtak_cl.main(self.SECRETS["BotUsername"], self.SECRETS["BotPassword"]),
             
             # Run NamakoBot!
-            self.main()
+            self.main(),
+            self.scheduler.main() # task scheduler
             
         )
     
     async def main(self):
+        
+        global UPDATE_IMAGES
         
         # Ensure both Playtak and Discord have connected
         
@@ -116,7 +158,15 @@ class NamakoBot:
         
         while True:
             
-            playtak_msg = await playtak_cl.rec()
+            if UPDATE_IMAGES:
+                await self.update_all_embeds()
+                continue
+            
+            if not self.queue:
+                playtak_msg = await playtak_cl.rec()
+            
+            else:
+                playtak_msg = self.queue.pop(0)
             
             if not playtak_msg:          # go into waiting mode
                 await asyncio.sleep(0.5)
@@ -137,32 +187,61 @@ class NamakoBot:
             
             if command_type == "new_game":
                 
-                embed = await self.generate_new_game_embed(msg_parse["data"])
+                game_id = msg_parse["data"]["game_no"]
                 
-                for channel in CHANNELS:
-                    message = await discord_cl.send(channel, f"<@&{ROLE}>", embed=embed)
-                
-                self.current_games[msg_parse["data"]["game_no"]] = {
-                    "message":   message,
-                    "game_data": msg_parse["data"]
-                }
+                await self.handle_new_game(msg_parse, game_id)
 
-            
             elif command_type == "end_game":
                 
-                game = await playtak_cl.get_playtak_game(msg_parse["data"]["game_no"])
+                game_id = msg_parse["data"]["game_no"]
                 
-                result  = game["result"]
-                data    = msg_parse["data"] | {"result": result}
-                message = self.current_games[msg_parse["data"]["game_no"]]["message"]
-                embed   = await self.generate_new_game_embed(data)
+                await self.handle_end_game(msg_parse, game_id)
                 
-                
-                await discord_cl.edit(message, f"<@&{ROLE}>", embed=embed)
+                self.current_games.pop(game_id)
             
             await asyncio.sleep(0.01) # Gets things quick
     
-    async def generate_new_game_embed(self, data, top=25):
+    #? Image generation functions
+    
+    async def handle_new_game(self, msg, game_id):
+        
+        self.current_games[game_id] = { # hack to get this to work
+            "game_data": msg["data"],
+            "message":   None,
+            "link":      None
+        }
+        
+        embed = await self.generate_new_game_embed(game_id)
+        
+        for channel in CHANNELS:
+            message = await discord_cl.send(channel, f"<@&{ROLE}>", embed=embed)
+        
+        self.current_games[game_id]["message"] = message
+    
+    async def handle_end_game(self, msg, game_id):
+        game = await playtak_cl.get_playtak_game(game_id)
+                
+        print(game)
+                
+        self.current_games[game_id]["game_data"] = msg["data"] | {"result": game["result"]}
+                
+        moves = [i.split(" ") for i in game["notation"].split(",")]
+                
+        self.current_games[game_id]["link"] = await self.generate_image_link(game_id, moves=moves)
+                
+        await self.update_embed(game_id, update_attach=False)
+    
+    
+    async def update_embed(self, game_id, update_attach=False):
+        
+        message = self.current_games[game_id]["message"]
+        embed   = await self.generate_new_game_embed(game_id, update_attach=update_attach)
+                        
+        await discord_cl.edit(message, f"<@&{ROLE}>", embed=embed)
+    
+    async def generate_new_game_embed(self, game_id, top=25, update_attach=True):
+        
+        data = self.current_games[game_id]["game_data"]
         
         out_format = self.EMBEDS["new_game"]
         
@@ -211,14 +290,129 @@ class NamakoBot:
         ]
         
         out_format["description"] = "\n".join([i for i in parameters if i])
+        
+        if update_attach:
+            image_url = await self.generate_image_link(game_id)
+            
+            if not image_url:
+                image_url = self.current_games[game_id]["link"]
+                
+        
+        else:
+            image_url = self.current_games[game_id]["link"]
+        
+        out_format["image"] = {"url": image_url}
 
         return discord.Embed.from_dict(out_format)
-    
+
     def generate_rating_str(self, player_name: str, top=25):
         
         rank, rating = playtak_cl.rankings[player_name] if (player_name in playtak_cl.rankings) else (None, None)
         
         return (f"{rating}" if rating else "unrated") + (f", #{rank}" if rank and rank <= top else "")
+
+    async def update_all_embeds(self):
+        
+        global UPDATE_IMAGES
+        
+        for game_no, game in self.current_games.items():
+            
+            data = game["game_data"]
+            await self.update_embed(game_no, data)
+        
+        UPDATE_IMAGES = False
+    
+    async def generate_image_link(self, game_id, moves=None):
+        
+        
+        
+        if not moves:
+            moves = await self.get_game_moves(game_id)
+        
+        if moves == None:
+            return None
+        
+        game = self.current_games[game_id]["game_data"]
+        
+        size, half_komi    = game["size"],                 game["half_komi"]
+        caps, flats        = game["capstones"],            game["pieces"]
+        player_1, player_2 = quote_plus(game["player_1"]), quote_plus(game["player_2"]) # have to ensure compat with URL
+        theme              = quote_plus(self.THEME)
+        
+        engine = TakBoard(size, half_komi)
+        player = "white"
+        
+        move = None
+        
+        for server_move in moves:
+            
+            move = engine.server_to_move(server_move, player)
+            
+            engine.make_move(move, player)
+            
+            player = engine.invert_player(player)
+        
+        tps       = quote_plus(engine.position_to_TPS()) # quote_plus to ensure URL compat
+        last_move = ""
+        
+        if move != None:
+            last_move = "&hl=" + quote_plus(engine.move_to_ptn(move))
+        
+        
+        url = f"https://tps.ptn.ninja/?tps={tps}&imageSize=sm&caps={caps}&flats={flats}&player1={player_1}&player2={player_2}&name=game.png&theme={theme}" + last_move
+        
+        return url
+    
+    async def get_game_moves(self, game_id: int) -> list[list[str]]:
+        
+        # Observe game
+        
+        msg   = "blank"
+        moves = []
+        
+        await playtak_cl.send(f"Observe {game_id}")
+        
+        while msg:
+            
+            msg = await playtak_cl.rec()
+
+            if not msg: # just found a None - couldn't get the message through
+                break
+            
+            tokens = msg.split(" ")
+            
+            if tokens[0][:5] != "Game#":          # Not a Game command
+                
+                self.queue.append(msg)
+                
+                await asyncio.sleep(0.01)
+                continue
+            
+            command = tokens[1]
+            
+            if command not in ["P", "M", "Undo"]: # Not a place/move command (coming from Observe). Undo is kept because weird shit could happen.
+                await asyncio.sleep(0.01)
+                continue
+            
+            if command in ["P", "M"]:
+                moves.append(tokens[1:])
+            
+            elif command == "Undo" and len(moves) > 1:
+                moves.pop(-1)
+            
+            elif command in ["Abandoned.", "Over"]: # EXIT. ABORT. GAME'S OVER, DON'T SPEND TIME HERE
+                
+                await playtak_cl.send(f"Unobserve {game_id}")
+                
+                print("Over")
+                
+                return None
+            
+            await asyncio.sleep(0.01)
+        
+        await playtak_cl.send(f"Unobserve {game_id}")
+        
+        return moves
 
 
 

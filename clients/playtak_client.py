@@ -122,17 +122,6 @@ class PlaytakClient:
                 "command_type": "new_game" if tokens[1] == "Add" else "end_game",
                 "data": self.parse_game_params(tokens[2:])
             }
-        
-        elif tokens[0][:5] == "Game#" and tokens[1] in ["P", "M"]:
-            
-            #? Move commands. Please note: you'll need to recreate the game from scratch when it ends.
-                
-            return {
-                "command_type": "move",
-                "data": tokens[1:]
-            }
-        
-        return None
 
     def parse_game_params(self, params: list) -> dict:
         

@@ -1082,7 +1082,7 @@ class TakBoard:
             
             current_row = self.size - row_num - 1
             
-            start, end = (self.size * current_row), (self.size * current_row + 6)
+            start, end = (self.size * current_row), (self.size * current_row + self.size)
             row = self.state[start:end]
             
             # Collapse
