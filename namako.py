@@ -19,8 +19,6 @@ KNOWN_GUILDS = [1058966677729058846] # , 176389490762448897]
 
 GUILDS   = {}
 
-ROLE     = 1199150664446652468
-
 UPDATE_IMAGES = False
 
 RESERVE_COUNTS = {
@@ -247,7 +245,7 @@ class NamakoBot:
         
         for message in messages:
             embed   = await self.generate_new_game_embed(game_id, update_attach=update_attach)
-            await discord_cl.edit(message, f"<@&{ROLE}>", embed=embed)
+            await discord_cl.edit(message, embed=embed)
     
     async def generate_new_game_embed(self, game_id, top=25, update_attach=True):
         
