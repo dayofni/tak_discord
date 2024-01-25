@@ -216,18 +216,19 @@ class NamakoBot:
         
         self.current_games[game_id] = { # hack to get this to work
             "game_data": msg["data"],
-            "message":   None,
+            "messages":  None,
             "link":      None
         }
         
         embed = await self.generate_new_game_embed(game_id)
         
-        message = None
+        messages = []
         
         for channel in GUILDS.values():
             message = await discord_cl.send(channel, f"<@&{ROLE}>", embed=embed)
+            messages.append(message)
         
-        self.current_games[game_id]["message"] = message
+        self.current_games[game_id]["messages"] = messages
     
     async def handle_end_game(self, msg, game_id):
         game = await playtak_cl.get_playtak_game(game_id)
@@ -242,10 +243,11 @@ class NamakoBot:
     
     async def update_embed(self, game_id, update_attach=False):
         
-        message = self.current_games[game_id]["message"]
-        embed   = await self.generate_new_game_embed(game_id, update_attach=update_attach)
-                        
-        await discord_cl.edit(message, f"<@&{ROLE}>", embed=embed)
+        messages = self.current_games[game_id]["messages"]
+        
+        for message in messages:
+            embed   = await self.generate_new_game_embed(game_id, update_attach=update_attach)
+            await discord_cl.edit(message, f"<@&{ROLE}>", embed=embed)
     
     async def generate_new_game_embed(self, game_id, top=25, update_attach=True):
         
