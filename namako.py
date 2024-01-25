@@ -7,10 +7,18 @@ from tak.board              import TakBoard
 from clients.discord_client import DiscordClient
 from clients.playtak_client import PlaytakClient
 
+from discord import TextChannel
+
 from urllib.parse import quote_plus
 
-GUILDS   = [1058966677729058846]
-CHANNELS = [1058966677729058849]
+
+# Guilds included because global commands take ages to start up.
+# Will be removed once I release 1.0.
+
+KNOWN_GUILDS = [1058966677729058846] # , 176389490762448897] 
+
+GUILDS   = {}
+
 ROLE     = 1199150664446652468
 
 UPDATE_IMAGES = False
@@ -40,14 +48,15 @@ async def on_ready():
         print(f"Discord: Logged in as {bot.user}!")
         ready = True
 
-@bot.slash_command(guild_ids=GUILDS)
+@bot.slash_command(guild_ids=KNOWN_GUILDS)
 async def ping(ctx):
     await ctx.respond(f"Pinged by <@{ctx.author.id}>.")
 
-@bot.slash_command(guild_ids=GUILDS)
-async def set_channel(ctx):
-    ...
-
+@bot.slash_command(guild_ids=KNOWN_GUILDS)
+async def set_channel(ctx, channel: TextChannel):
+    guild = ctx.guild.id
+    GUILDS[guild] = channel.id
+    await ctx.respond(f"Output channel set to channel {channel.id}.")
 
 #? Namako [Playtak Bridge]
 
@@ -213,15 +222,13 @@ class NamakoBot:
         
         embed = await self.generate_new_game_embed(game_id)
         
-        for channel in CHANNELS:
+        for channel in GUILDS.values():
             message = await discord_cl.send(channel, f"<@&{ROLE}>", embed=embed)
         
         self.current_games[game_id]["message"] = message
     
     async def handle_end_game(self, msg, game_id):
         game = await playtak_cl.get_playtak_game(game_id)
-                
-        print(game)
                 
         self.current_games[game_id]["game_data"] = msg["data"] | {"result": game["result"]}
                 
@@ -230,7 +237,6 @@ class NamakoBot:
         self.current_games[game_id]["link"] = await self.generate_image_link(game_id, moves=moves)
                 
         await self.update_embed(game_id, update_attach=False)
-    
     
     async def update_embed(self, game_id, update_attach=False):
         
@@ -404,7 +410,7 @@ class NamakoBot:
                 
                 await playtak_cl.send(f"Unobserve {game_id}")
                 
-                print("Over")
+                print("Game over, exiting...")
                 
                 return None
             
