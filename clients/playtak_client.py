@@ -69,7 +69,7 @@ class PlaytakClient:
         
         while True:
             
-            await asyncio.sleep(25)
+            await asyncio.sleep(20)
             
             await self.send("PING")
     

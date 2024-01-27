@@ -15,7 +15,7 @@ from urllib.parse import quote_plus
 # Guilds included because global commands take ages to start up.
 # Will be removed once I release 1.0.
 
-KNOWN_GUILDS = [1058966677729058846] # , 176389490762448897] 
+KNOWN_GUILDS = [1058966677729058846, 176389490762448897] 
 
 GUILDS   = {}
 
@@ -223,8 +223,9 @@ class NamakoBot:
         messages = []
         
         for channel in GUILDS.values():
-            message = await discord_cl.send(channel, f"<@&{ROLE}>", embed=embed)
+            message = await discord_cl.send(channel, None, embed=embed)
             messages.append(message)
+            await asyncio.sleep(0.01)
         
         self.current_games[game_id]["messages"] = messages
     
@@ -241,13 +242,18 @@ class NamakoBot:
     
     async def update_embed(self, game_id, update_attach=False):
         
+        print(f"Updating {game_id}.")
+        
         messages = self.current_games[game_id]["messages"]
         
         for message in messages:
-            embed   = await self.generate_new_game_embed(game_id, update_attach=update_attach)
-            await discord_cl.edit(message, embed=embed)
+            embed = await self.generate_new_game_embed(game_id, update_attach=update_attach)
+            await discord_cl.edit(message, None, embed=embed)
+            await asyncio.sleep(0.01)
     
     async def generate_new_game_embed(self, game_id, top=25, update_attach=True):
+        
+        print("Generating embed... ", end=" ")
         
         data = self.current_games[game_id]["game_data"]
         
@@ -299,12 +305,13 @@ class NamakoBot:
         
         out_format["description"] = "\n".join([i for i in parameters if i])
         
+        print("done.")
+        
         if update_attach:
             image_url = await self.generate_image_link(game_id)
             
             if not image_url:
                 image_url = self.current_games[game_id]["link"]
-                
         
         else:
             image_url = self.current_games[game_id]["link"]
@@ -332,12 +339,13 @@ class NamakoBot:
     
     async def generate_image_link(self, game_id, moves=None):
         
-        
+        print("Generating image... ", end=" ")
         
         if not moves:
             moves = await self.get_game_moves(game_id)
         
         if moves == None:
+            print("aborted.")
             return None
         
         game = self.current_games[game_id]["game_data"]
@@ -356,6 +364,9 @@ class NamakoBot:
             
             move = engine.server_to_move(server_move, player)
             
+            if not move:
+                return None
+            
             engine.make_move(move, player)
             
             player = engine.invert_player(player)
@@ -368,6 +379,8 @@ class NamakoBot:
         
         
         url = f"https://tps.ptn.ninja/?tps={tps}&imageSize=sm&caps={caps}&flats={flats}&player1={player_1}&player2={player_2}&name=game.png&theme={theme}" + last_move
+        
+        print("done.")
         
         return url
     

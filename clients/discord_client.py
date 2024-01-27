@@ -64,9 +64,12 @@ class DiscordClient:
         
         return message
     
-    async def edit(self, message: discord.Message, msg_str: str, embed: discord.Embed) -> discord.Message:
+    async def edit(self, message: discord.Message, msg_str: str, embed: discord.Embed, timeout=1) -> discord.Message:
         
-        new_message = await message.edit(msg_str, embed=embed)
+        try:
+            new_message = await asyncio.wait_for(message.edit(msg_str, embed=embed), timeout=timeout)
+        except asyncio.TimeoutError:
+            return None
         
         return new_message
     
