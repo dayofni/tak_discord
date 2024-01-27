@@ -24,7 +24,7 @@ RESERVE_COUNTS = {
 CHARS = [chr(i+97) for i in range(26)]
 
 #role to ping
-ROLE = ""
+ROLE = "" #todo? this variable wasnt declared in the original code
 
 def timestamp(t):
     return f"{t}s" if t < 60 else f"{t // 60}:{t % 60:0=2}"
@@ -40,8 +40,8 @@ class GameWatcher:
     #currently active guest tokens
     tokens = []
 
-    def __init__(self, gameId, data, theme, template):
-        self.gameId = gameId
+    def __init__(self, data, theme, template):
+        self.gameId = data["game_no"]
         self.data = data
         self.theme = theme
         self.template = template
