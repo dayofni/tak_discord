@@ -3,7 +3,6 @@ from urllib.parse import quote_plus
 
 import discord
 import websockets
-import asyncio
 
 from namako import playtak_cl, discord_cl, GUILDS
 from tak.board import TakBoard
@@ -64,6 +63,12 @@ class GameWatcher:
         self.embed = await self.generateEmbed()
         self.messages = []
 
+
+
+
+    # Starts sending messages and kick off the mainloop
+    async def start(self):
+
         for channel in GUILDS.values():
             message = await discord_cl.send(channel, f"<@&{ROLE}>", embed=self.embed)
             self.messages.append(message)
@@ -72,10 +77,12 @@ class GameWatcher:
         async with websockets.connect("ws://playtak.com:9999/ws", subprotocols=["binary"], ping_timeout=None) as ws:
             # the idea is that unique tokens create unique guest accounts, lets hope thats in fact the case
             await ws.send(f"Login Guest {self.token}")
-            await ws.send(f"Observe {gameId}")
+            await ws.send(f"Observe {self.gameId}")
 
             await self.mainLoop(ws)
 
+
+    # Main listener coroutine
     async def mainLoop(self, ws):
         while True:
             msg = (await ws.recv()).decode()[:-1]
@@ -93,10 +100,12 @@ class GameWatcher:
                     self.updateEmbed()
 
                 case ["Abandoned.", player, "quit"]:
+                    self.data["result"] = "1-0" if player == self.data["player_1"] else "0-1"
                     self.cleanUp()
                     break
 
                 case ["Over", result]:
+                    self.data["result"] = result
                     self.cleanUp()
                     break
 
@@ -178,9 +187,10 @@ class GameWatcher:
         return discord.Embed.from_dict(out_format)
 
     def updateEmbed(self):
+        embed = self.generateEmbed()
         for message in self.messages:
-            embed = self.generateEmbed()
             await discord_cl.edit(message, embed=embed)
 
     def cleanUp(self):
+        self.updateEmbed()
         self.tokens.remove(self.token)
