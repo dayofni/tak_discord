@@ -45,14 +45,9 @@ class DiscordClient:
 
         assert channel is not None, f"Couldn't find channel {channel_num}."
 
-        message = await channel.send(msg_str, embed=embed)
-        
-        return message
-    
+        return await channel.send(msg_str, embed=embed)
+
     async def edit(self, message: discord.Message, msg_str: str, embed: discord.Embed) -> discord.Message:
-        
-        new_message = await message.edit(msg_str, embed=embed)
-        
-        return new_message
-    
+
+        return await message.edit(msg_str, embed=embed)
     
