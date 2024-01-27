@@ -67,30 +67,11 @@ def inty_division(n, div):
     return a
         
 def get_timestamp(sec):
-    
-    seconds = sec %  60
-    minutes = sec // 60
-    
-    if seconds == 0 and minutes == 0:
-        return "0s"
-    
-    minutes_format = ""
-    seconds_format = "00"
-    
-    if minutes > 0:
-        minutes_format = f"{minutes}:"
-    
-    if seconds > 0:
-        digits = len(str(seconds))
-        seconds_format = "0" * (2 - digits) + str(seconds)
-    
-    if minutes == 0:
-        return f"{minutes_format}{seconds_format}s"
-    
-    return f"{minutes_format}{seconds_format}"
+    #oneliners ftw :3
+    return f"{sec}s" if sec < 60 else f"{sec // 60}:{sec%60:0=2}"
 
 class TaskScheduler:
-    
+
     def __init__(self):
         
         self.tasks = []
