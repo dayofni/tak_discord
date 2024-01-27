@@ -15,8 +15,6 @@ class DiscordClient:
     """
     
     def __init__(self, bot=None):
-        
-        self.known_channels = []
         self.ready = False
         
         if bot == None:
@@ -37,29 +35,16 @@ class DiscordClient:
         """
         Sends a message (`msg_str` & `embed`) to the given channel (`channel_num`).
         """
-        
-        got_channel = False
-        
+
         # Is channel in cache?
-        
-        if channel_num in self.known_channels:
-            channel = self.bot.get_channel(channel_num)
-            got_channel = channel != None
-        
-        # Fetch channel manually (slower)
-            
-        if not got_channel:
+        channel = self.get_channel(channel_num)
+
+        # If it's not, fetch it
+        if channel is None:
             channel = await self.bot.fetch_channel(channel_num)
-            got_channel = channel != None
-        
-        # Make sure we have a channel
-        
-        assert got_channel, f"Couldn't find channel {channel_num}."
-        
-        # Add channel to cache
-        
-        self.known_channels.append(channel_num)
-        
+
+        assert channel is not None, f"Couldn't find channel {channel_num}."
+
         message = await channel.send(msg_str, embed=embed)
         
         return message
