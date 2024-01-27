@@ -59,50 +59,6 @@ async def set_channel(ctx, channel: TextChannel):
 
 #? Namako [Playtak Bridge]
 
-def inty_division(n, div):
-     
-    a = n / div
-    
-    if int(a) == a: return int(a)
-    
-    return a
-        
-def get_timestamp(sec):
-    #oneliners ftw :3
-    return f"{sec}s" if sec < 60 else f"{sec // 60}:{sec%60:0=2}"
-
-class TaskScheduler:
-
-    def __init__(self):
-        
-        self.tasks = []
-    
-    async def main(self):
-        
-        while True:
-            
-            await asyncio.sleep(1)
-            
-            for task in self.tasks:
-                task["last_run"] += 1
-                
-                if task["last_run"] >= task["interval"]:
-                    task["function"]()
-                    task["last_run"] = 0
-    
-    def schedule_task(self, function, interval_sec: int):
-        
-        self.tasks.append({
-            "function": function,
-            "interval": interval_sec,
-            "last_run": 0
-        })
-
-
-def update_imgs():
-    global UPDATE_IMAGES
-    UPDATE_IMAGES = True
-
 class NamakoBot:
     
     def __init__(self):
@@ -117,10 +73,7 @@ class NamakoBot:
             self.THEME = f.read()
         
         self.current_games = set()
-        self.queue = []
-        self.scheduler = TaskScheduler()
-        
-        self.scheduler.schedule_task(update_imgs, 15)
+
     
     async def start(self):
         
@@ -132,8 +85,6 @@ class NamakoBot:
             
             # Run NamakoBot!
             self.main(),
-            self.scheduler.main() # task scheduler
-            
         )
     
     async def main(self):
@@ -159,9 +110,6 @@ class NamakoBot:
             task = asyncio.create_task(gw.start())
             self.current_games.add(task) # keep a hard reference here, so the garbage-collector doesn't kill it
             task.add_done_callback(self.current_games.discard) # task removes itself when done
-
-    def endGame(self, gameId):
-        del self.current_games[gameId]
 
 if __name__ == "__main__":
     namako = NamakoBot()
