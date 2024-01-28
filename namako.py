@@ -13,9 +13,9 @@ from discord import TextChannel
 # Guilds included because global commands take ages to start up.
 # Will be removed once I release 1.0.
 
-KNOWN_GUILDS = [1058966677729058846] # , 176389490762448897] 
+KNOWN_GUILDS = [1201101141115674694]
 
-GUILDS   = {}
+GUILDS   = {1201101141115674694: 1201108655110639626}
 
 UPDATE_IMAGES = False
 

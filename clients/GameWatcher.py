@@ -25,7 +25,7 @@ RESERVE_COUNTS = {
 CHARS = [chr(i+97) for i in range(26)]
 
 #role to ping
-ROLE = "" #todo? this variable wasnt declared in the original code
+ROLE = 1201108541445001399
 
 with open("data/embeds.json") as f:
     EMBEDS = json.loads(f.read())
@@ -56,9 +56,9 @@ class GameWatcher:
 
 
         #create and log a unique token
-        self.token = random.choices(CHARS, k=20)
+        self.token = ''.join(random.choices(CHARS, k=20))
         while self.token in self.tokens:
-            self.token = random.choices(CHARS, k=20)
+            self.token = ''.join(random.choices(CHARS, k=20))
 
         self.tokens.append(self.token)
 
@@ -68,7 +68,6 @@ class GameWatcher:
 
     # Starts sending messages and kick off the mainloop
     async def start(self):
-
         for channel in self.guilds.values():
             message = await self.discord_cl.send(channel, f"<@&{ROLE}>", embed=self.embed)
             self.messages.append(message)
@@ -79,34 +78,49 @@ class GameWatcher:
             await ws.send(f"Login Guest {self.token}")
             await ws.send(f"Observe {self.gameId}")
 
+            print(f"Started watching {self.gameId}")
+
             await self.mainLoop(ws)
+
+        #we always get an error here, but i cant catch it, and it doesnt stop the program, so its fine i guess?
+        #it just clogs the console ;-;
+
+        print(f"Ended watching {self.gameId}")
 
 
     # Main listener coroutine
     async def mainLoop(self, ws):
-        while True:
-            msg = (await ws.recv()).decode()[:-1]
+        async for msg in ws:
+            msg = msg.decode()[:-1]
+            if msg.startswith(f"GameList Remove {self.gameId}"):
+                # if we receive the remove, we usually won't receive the Game Over after that
+                # so calculate result manually
+                self.data['result'] = self.engine.generate_win_str()
+                self.data['result'] = self.data['result'] if self.data['result'] is not None else "unknown"
+                break
 
-            if not msg.startswith(f"Game#{self.gameId}"): continue #unimportant message
+            if not msg.startswith(f"Game#{self.gameId}"):
+                continue
+
 
             msg = msg.split()[1:]
             match msg:
                 case ["M", *_] | ["P", *_]:
                     self.makeMove(msg)
-                    self.updateEmbed()
+                    await self.updateEmbed()
 
                 case ["Undo"]:
                     self.undoMove()
-                    self.updateEmbed()
+                    await self.updateEmbed()
 
                 case ["Abandoned.", player, "quit"]:
                     self.data["result"] = "1-0" if player == self.data["player_1"] else "0-1"
-                    self.cleanUp()
+                    await self.cleanUp()
                     break
 
                 case ["Over", result]:
                     self.data["result"] = result
-                    self.cleanUp()
+                    await self.cleanUp()
                     break
 
 
@@ -115,7 +129,6 @@ class GameWatcher:
         self.moves.append(move)
         self.engine.make_move(move, self.player)
         self.player = self.engine.invert_player(self.player)
-
 
     def undoMove(self):
         move = self.moves[-1]
@@ -129,11 +142,12 @@ class GameWatcher:
 
         # have to ensure compat with URL
         player_1, player_2 = quote_plus(self.data["player_1"]), quote_plus(self.data["player_2"])
-        theme = quote_plus(self.theme)
+        theme = quote_plus(THEME)
 
         tps = quote_plus(self.engine.position_to_TPS())  # quote_plus to ensure URL compat
 
-        last_move = "&hl=" + quote_plus(self.engine.move_to_ptn(self.moves[-1]))
+
+        last_move = "&hl=" + quote_plus(self.engine.move_to_ptn(self.moves[-1])) if len(self.moves) > 0 else ""
 
         return f"https://tps.ptn.ninja/?tps={tps}&imageSize=sm&caps={caps}&flats={flats}&player1={player_1}&player2={player_2}&name=game.png&theme={theme}" + last_move
 
@@ -182,6 +196,6 @@ class GameWatcher:
         for message in self.messages:
             await self.discord_cl.edit(message, embed=embed)
 
-    def cleanUp(self):
-        self.updateEmbed()
+    async def cleanUp(self):
+        await self.updateEmbed()
         self.tokens.remove(self.token)
