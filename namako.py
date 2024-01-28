@@ -4,13 +4,10 @@ import discord
 import json
 
 from clients.GameWatcher import GameWatcher
-from tak.board              import TakBoard
 from clients.discord_client import DiscordClient
 from clients.playtak_client import PlaytakClient
 
 from discord import TextChannel
-
-from urllib.parse import quote_plus
 
 
 # Guilds included because global commands take ages to start up.
@@ -57,6 +54,11 @@ async def set_channel(ctx, channel: TextChannel):
     GUILDS[guild] = channel.id
     await ctx.respond(f"Output channel set to channel {channel.id}.")
 
+
+def ratingStr(player_name: str, top=25):
+    rank, rating = playtak_cl.rankings[player_name] if (player_name in playtak_cl.rankings) else (None, None)
+    return (f"{rating}" if rating else "unrated") + (f", #{rank}" if rank and rank <= top else "")
+
 #? Namako [Playtak Bridge]
 
 class NamakoBot:
@@ -65,16 +67,10 @@ class NamakoBot:
         
         with open("data/secrets.json") as f:
             self.SECRETS = json.loads(f.read())
-
-        with open("data/embeds.json") as f:
-            self.EMBEDS = json.loads(f.read())
-
-        with open("data/theme.json") as f: # just need the string <3
-            self.THEME = f.read()
         
         self.current_games = set()
 
-    
+
     async def start(self):
         
         await asyncio.gather(
@@ -106,7 +102,12 @@ class NamakoBot:
             data = playtak_cl.parse_game_params(data)
 
             # A new game has begun on playtak!
-            gw = GameWatcher(data, self.THEME, self.EMBEDS["new_game"])
+            player_1_rank = ratingStr(data['player_1'])
+            player_2_rank = ratingStr(data['player_2'])
+
+            header = f"**{data['player_1']}** ({player_1_rank}) vs. **{data['player_2']}** ({player_2_rank}) is live on [playtak.com](https://playtak.com)!\n"
+
+            gw = GameWatcher(data, header, discord_cl, GUILDS)
             task = asyncio.create_task(gw.start())
             self.current_games.add(task) # keep a hard reference here, so the garbage-collector doesn't kill it
             task.add_done_callback(self.current_games.discard) # task removes itself when done

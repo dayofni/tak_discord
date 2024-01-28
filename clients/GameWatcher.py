@@ -1,10 +1,11 @@
+import json
 import random
 from urllib.parse import quote_plus
 
 import discord
 import websockets
 
-from namako import playtak_cl, discord_cl, GUILDS
+# from namako import playtak_cl, discord_cl, GUILDS
 from tak.board import TakBoard
 
 #playtak websocket uri
@@ -26,13 +27,14 @@ CHARS = [chr(i+97) for i in range(26)]
 #role to ping
 ROLE = "" #todo? this variable wasnt declared in the original code
 
+with open("data/embeds.json") as f:
+    EMBEDS = json.loads(f.read())
+
+with open("data/theme.json") as f:  # just need the string <3
+    THEME = f.read()
+
 def timestamp(t):
     return f"{t}s" if t < 60 else f"{t // 60}:{t % 60:0=2}"
-
-
-def ratingStr(player_name: str, top=25):
-    rank, rating = playtak_cl.rankings[player_name] if (player_name in playtak_cl.rankings) else (None, None)
-    return (f"{rating}" if rating else "unrated") + (f", #{rank}" if rank and rank <= top else "")
 
 
 #this class creates a guest login and keeps track of a single game
@@ -40,11 +42,12 @@ class GameWatcher:
     #currently active guest tokens
     tokens = []
 
-    def __init__(self, data, theme, template):
+    def __init__(self, data, header, discord_cl, guilds):
         self.gameId = data["game_no"]
         self.data = data
-        self.theme = theme
-        self.template = template
+        self.head = header
+        self.discord_cl = discord_cl
+        self.guilds = guilds
 
         self.moves = []
 
@@ -60,17 +63,14 @@ class GameWatcher:
         self.tokens.append(self.token)
 
 
-        self.embed = await self.generateEmbed()
+        self.embed = self.generateEmbed()
         self.messages = []
-
-
-
 
     # Starts sending messages and kick off the mainloop
     async def start(self):
 
-        for channel in GUILDS.values():
-            message = await discord_cl.send(channel, f"<@&{ROLE}>", embed=self.embed)
+        for channel in self.guilds.values():
+            message = await self.discord_cl.send(channel, f"<@&{ROLE}>", embed=self.embed)
             self.messages.append(message)
 
         # login using token, and start observing game
@@ -139,17 +139,8 @@ class GameWatcher:
 
     def generateEmbed(self, top=25):
 
-        out_format = self.template
-
-        # PLAYER DATA
-        player_1 = self.data["player_1"]
-        player_2 = self.data["player_2"]
-
-        player_1_rank = ratingStr(player_1, top=top)
-        player_2_rank = ratingStr(player_2, top=top)
-
-        desc = f"**{player_1}** ({player_1_rank}) vs. **{player_2}** ({player_2_rank}) is live on [playtak.com](https://playtak.com)!\n"
-        desc += f"\n**Game ID:** {self.gameId}"
+        out_format = EMBEDS["new_game"]
+        desc = self.head + f"\n**Game ID:** {self.gameId}"
 
         # STANDARD PARAMETERS
         size = self.data["size"]
@@ -186,10 +177,10 @@ class GameWatcher:
 
         return discord.Embed.from_dict(out_format)
 
-    def updateEmbed(self):
+    async def updateEmbed(self):
         embed = self.generateEmbed()
         for message in self.messages:
-            await discord_cl.edit(message, embed=embed)
+            await self.discord_cl.edit(message, embed=embed)
 
     def cleanUp(self):
         self.updateEmbed()
