@@ -2,7 +2,7 @@
 import asyncio
 import discord
 
-from discord.ext import tasks
+EDIT_INTERVAL = 2
 
 class DiscordClient:
     
@@ -15,8 +15,6 @@ class DiscordClient:
     """
     
     def __init__(self, bot=None):
-        
-        self.known_channels = []
         self.ready = False
         
         if bot == None:
@@ -37,18 +35,12 @@ class DiscordClient:
         """
         Sends a message (`msg_str` & `embed`) to the given channel (`channel_num`).
         """
-        
-        got_channel = False
-        
+
         # Is channel in cache?
-        
-        if channel_num in self.known_channels:
-            channel = self.bot.get_channel(channel_num)
-            got_channel = channel != None
-        
-        # Fetch channel manually (slower)
-            
-        if not got_channel:
+        channel = self.bot.get_channel(channel_num)
+
+        # If it's not, fetch it
+        if channel is None:
             channel = await self.bot.fetch_channel(channel_num)
             got_channel = channel != None
         

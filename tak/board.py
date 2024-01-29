@@ -1378,7 +1378,7 @@ class TakBoard:
         return edges
 
     #? ASCII Representation
-    
+    #question, should this not return F-0 for flat wins???? too scared to touch this tbh
     def generate_win_str(self):
         
         """
