@@ -149,7 +149,7 @@ class GameWatcher:
 
         last_move = "&hl=" + quote_plus(self.engine.move_to_ptn(self.moves[-1])) if len(self.moves) > 0 else ""
 
-        return f"https://tps.ptn.ninja/?tps={tps}&imageSize=sm&caps={caps}&flats={flats}&player1={player_1}&player2={player_2}&name=game.png&theme={theme}" + last_move
+        return f"https://tps.ptn.ninja/png?tps={tps}&imageSize=sm&caps={caps}&flats={flats}&player1={player_1}&player2={player_2}&name=game.png&theme={theme}" + last_move
 
     def generateEmbed(self, top=25):
 
